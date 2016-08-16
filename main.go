@@ -116,7 +116,7 @@ func readBE32(conn io.Reader) (val uint16, err error) {
 }
 
 func handleConnection(conn net.Conn, c chan *pb.PBDNSMessage) {
-	log.Print("Protobuf Connection established from", conn.RemoteAddr())
+	log.Print("Protobuf Connection established from ", conn.RemoteAddr())
 	defer conn.Close()
 
 	for {
