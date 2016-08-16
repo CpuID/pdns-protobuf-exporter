@@ -24,7 +24,9 @@ var _ = math.Inf
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
-const _ = proto.ProtoPackageIsVersion1
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
 type PBDNSMessage_Type int32
 
@@ -401,6 +403,8 @@ func init() {
 	proto.RegisterEnum("PBDNSMessage_SocketFamily", PBDNSMessage_SocketFamily_name, PBDNSMessage_SocketFamily_value)
 	proto.RegisterEnum("PBDNSMessage_SocketProtocol", PBDNSMessage_SocketProtocol_name, PBDNSMessage_SocketProtocol_value)
 }
+
+func init() { proto.RegisterFile("dnsmessage.proto", fileDescriptor0) }
 
 var fileDescriptor0 = []byte{
 	// 490 bytes of a gzipped FileDescriptorProto

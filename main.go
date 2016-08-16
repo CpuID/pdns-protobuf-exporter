@@ -7,16 +7,45 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"strings"
 	"time"
 
-	"dnsmessage"
 	"github.com/golang/protobuf/proto"
+	pb "github.xs4all.net/kaisan/pdns-receiver/dnsmessage"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 var (
-	listenAddress = flag.String("pb.listen-address", ":4242", "Address on which to listen for PBDNSMessages")
+	pbAddress     = flag.String("pb.listen-address", ":4242", "Address on which to listen for PBDNSMessages")
+	listenAddress = flag.String("web.listen-address", ":9142", "Address on which to expose metrics and web interface.")
+	metricsPath   = flag.String("web.telemetry-path", "/metrics", "Path under which to expose metrics.")
+	timeformat    = "2006-01-02 15:04:05.000"
+
+	appliedPolicy = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "pdns_protobuf",
+			Subsystem: "rpz",
+			Name:      "applied_policy_total",
+			Help:      "Number of packets applied in each received policyName",
+		},
+		[]string{"policy"},
+	)
+	answersTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "pdns_protobuf",
+			Subsystem: "rpz",
+			Name:      "answers_total",
+			Help:      "Number of packets answered in total",
+		},
+	)
 )
+
+func init() {
+	prometheus.MustRegister(appliedPolicy)
+	prometheus.MustRegister(answersTotal)
+}
 
 func main() {
 	flag.Parse()
@@ -27,26 +56,55 @@ func main() {
 		for {
 			m := <-c
 			if t := m.GetType(); t == pb.PBDNSMessage_DNSQueryType {
-				printQueryMessage(m)
+				//printSummary(m, "Query")
+				//printQueryMessage(m)
 			} else if t == pb.PBDNSMessage_DNSResponseType {
-				printResponseMessage(m)
+				if p := m.GetResponse().GetAppliedPolicy(); p != "" {
+					appliedPolicy.WithLabelValues(p).Inc()
+				}
+				answersTotal.Inc()
+				//printSummary(m, "Response")
+				//printQueryMessage(m)
+				//printResponseMessage(m)
 			}
 		}
 	}()
 
-	// listen
-	ln, err := net.Listen("tcp", *listenAddress)
-	if err != nil {
-		log.Fatal("Cannot listen: %s", err)
-	}
-	for {
-		conn, err := ln.Accept()
+	// listen for protobuf
+	go func() {
+		ln, err := net.Listen("tcp", *pbAddress)
 		if err != nil {
-			log.Printf("Error accepting: %s", err)
-			continue
+			log.Fatal("Cannot listen: %s", err)
 		}
-		go handleConnection(conn, c)
-	}
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				log.Printf("Error accepting: %s", err)
+				continue
+			}
+			go handleConnection(conn, c)
+		}
+	}()
+
+	// listen for prometheus scrapes
+	handler := prometheus.Handler()
+	http.Handle(*metricsPath, handler)
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`
+		<html>
+			<head>
+				<title>Powerdns PBDNSMessage stats exporter</title>
+			</head>
+			<body>
+				<h1>Powerdns PBDNSMessage stats exporter</h1>
+				<p>
+					<a href="` + *metricsPath + `">Metrics</a>
+				</p>
+			</body>
+		</html>`))
+	})
+	log.Println("Listening on", *listenAddress)
+	log.Fatal(http.ListenAndServe(*listenAddress, nil))
 }
 
 func readBE32(conn io.Reader) (val uint16, err error) {
@@ -58,68 +116,68 @@ func readBE32(conn io.Reader) (val uint16, err error) {
 }
 
 func handleConnection(conn net.Conn, c chan *pb.PBDNSMessage) {
-	fmt.Println("Connection established")
+	log.Print("Protobuf Connection established from", conn.RemoteAddr())
 	defer conn.Close()
 
-	pblen, err := readBE32(conn)
-	if err != nil {
-		log.Fatalf("Cannot read pb length: %s", err)
-	}
-	data := make([]byte, pblen)
-	n, err := conn.Read(data)
-	if err != nil {
-		log.Fatalf("Cannot read: %s", err)
-	}
-	if n != int(pblen) {
-		log.Print(">> read != advertised?")
-	}
+	for {
+		pblen, err := readBE32(conn)
+		if err != nil {
+			log.Fatalf("Cannot read pb length: %s", err)
+		}
+		data := make([]byte, pblen)
+		n, err := conn.Read(data)
+		if err != nil {
+			log.Fatalf("Cannot read: %s", err)
+		}
+		if n != int(pblen) {
+			log.Print(">> read != advertised?")
+		}
 
-	message := &pb.PBDNSMessage{}
-	err = proto.Unmarshal(data[0:n], message)
-	if err != nil {
-		log.Printf("Cannot unmarshal packet: %s", err)
-		return
+		message := &pb.PBDNSMessage{}
+		err = proto.Unmarshal(data[0:n], message)
+		if err != nil {
+			log.Printf("Cannot unmarshal packet: %s", err)
+			continue
+		}
+		c <- message
 	}
-	c <- message
 }
 
-func printSummary(m *pb.PBDNSMessage) {
+func printSummary(m *pb.PBDNSMessage, typestr string) {
 	var (
 		ipfromstr                                  = "N/A"
 		iptostr                                    = "N/A"
 		messageidstr, datestr, initialrequestidstr string
 		requestorstr, protostr                     string
 	)
-	datestr = time.Unix(int64(r.GetTimeSec()), int64(r.GetTimeUsec())).Format("2006-01-02 15:04:05")
+	datestr = time.Unix(int64(m.GetTimeSec()), int64(m.GetTimeUsec())).Format(time.StampMilli)
 	if from := m.GetFrom(); from != nil {
 		ipfromstr = net.IP(from).String()
 	}
 	if to := m.GetTo(); to != nil {
 		iptostr = net.IP(to).String()
 	}
-	if m.GetSocketProtocol == pb.PBDNSMessage_UDP {
+	if m.GetSocketProtocol() == pb.PBDNSMessage_UDP {
 		protostr = "UDP"
 	} else {
 		protostr = "TCP"
 	}
 
-	if sub := m.GetOriginalRequestorSubnet(); d != nil {
-		requestorstr = " (" + net.IP(sub) + ")"
+	if sub := m.GetOriginalRequestorSubnet(); sub != nil {
+		requestorstr = " (" + net.IP(sub).String() + ")"
 	}
 
-	/*
-	   messageidstr = binascii.hexlify(m.GetMessageId())
-	*/
+	messageidstr = fmt.Sprintf("%x", m.GetMessageId())
 
 	fmt.Printf("[%s] %s of size %d: %s%s -> %s (%s), id: %d, uuid: %s%s\n",
 		datestr,
 		typestr,
-		msg.inBytes,
+		m.GetInBytes(),
 		ipfromstr,
 		requestorstr,
 		iptostr,
 		protostr,
-		msg.id,
+		m.GetId(),
 		messageidstr,
 		initialrequestidstr)
 }
@@ -136,7 +194,7 @@ func printResponseMessage(m *pb.PBDNSMessage) {
 		return
 	}
 
-	datestring = time.Unix(int64(r.GetQueryTimeSec()), int64(r.GetQueryTimeUsec())).Format("2006-01-02 15:04:05")
+	datestring = time.Unix(int64(r.GetQueryTimeSec()), int64(r.GetQueryTimeUsec())).Format(time.StampMilli)
 	fmt.Printf("- Query time: %s\n", datestring)
 
 	if p := r.GetAppliedPolicy(); p != "" {
@@ -192,5 +250,5 @@ func printQueryMessage(message *pb.PBDNSMessage) {
 	if qclass == 0 {
 		qclass = 1
 	}
-	fmt.Printf("- Question: %d, %d, %s", qclass, q.GetQType(), q.GetQName())
+	fmt.Printf("- Question: %d, %d, %s\n", qclass, q.GetQType(), q.GetQName())
 }
