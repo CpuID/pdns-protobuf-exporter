@@ -56,16 +56,16 @@ func main() {
 		for {
 			m := <-c
 			if t := m.GetType(); t == pb.PBDNSMessage_DNSQueryType {
-				//printSummary(m, "Query")
-				//printQueryMessage(m)
+				printSummary(m, "Query")
+				printQueryMessage(m)
 			} else if t == pb.PBDNSMessage_DNSResponseType {
 				if p := m.GetResponse().GetAppliedPolicy(); p != "" {
 					appliedPolicy.WithLabelValues(p).Inc()
 				}
 				answersTotal.Inc()
-				//printSummary(m, "Response")
-				//printQueryMessage(m)
-				//printResponseMessage(m)
+				printSummary(m, "Response")
+				printQueryMessage(m)
+				printResponseMessage(m)
 			}
 		}
 	}()
