@@ -9,4 +9,6 @@ RUN apk add --no-cache git && \
     apk del git 
 RUN go-wrapper install
 
+EXPOSE 9142
+
 CMD ["go-wrapper", "run"]
