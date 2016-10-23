@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	pb "github.com/CpuID/pdns-protobuf-exporter/dnsmessage"
 	"github.com/golang/protobuf/proto"
-	pb "github.xs4all.net/kaisan/pdns-receiver/dnsmessage"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
