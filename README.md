@@ -33,8 +33,10 @@ This config enables:
 If upstream [dnsmessage.proto](https://github.com/PowerDNS/pdns/blob/master/pdns/dnsmessage.proto) changes, replace it locally then run:
 
 ```
-docker-compose -f docker-compose.protoc.yml build
-docker-compose -f docker-compose.protoc.yml up
+$ docker-compose -f docker-compose.protoc.yml build
+$ docker-compose -f docker-compose.protoc.yml up
+..... exited with code 0
+$
 ```
 
 Which should replace `dnsmessage/dnsmessage.pb.go` using `dnsmessage/dnsmessage.proto` as an input.
