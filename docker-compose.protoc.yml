@@ -1,0 +1,13 @@
+version: '2.1'
+
+services:
+  # Once-off builder for dnsmessage.pb.go
+  # Used if upstream changes the PB schema, for new code generation purposes
+  protoc-dnsmessage:
+    build:
+      context: .
+      dockerfile: Dockerfile.protoc
+    command: /protoc/bin/protoc --go_out=. dnsmessage.proto
+    working_dir: /dnsmessage
+    volumes:
+      - "./dnsmessage:/dnsmessage"

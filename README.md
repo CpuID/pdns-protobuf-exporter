@@ -1,5 +1,10 @@
-pdns-receiver
-=============
+*pdns-protobuf-exporter*
+
+# Credit
+
+Formerly from https://github.com/giganteous but upstream repo was removed. Slight improvements to usability, code is mostly unchanged.
+
+# Details
 
 A tcp server that listens on port 4242 for PowerDNS recursor streams, and collect RPZ statistics about the incoming stream.
 
@@ -23,4 +28,13 @@ This config enables:
 * An RPZ config that rewrites answers that contain IP's from the DROP list
 * An RPZ config that answers questions to blacklisted domains (malware, mostly)
 
+# Building new dnsmessage.proto
 
+If upstream [dnsmessage.proto](https://github.com/PowerDNS/pdns/blob/master/pdns/dnsmessage.proto) changes, replace it locally then run:
+
+```
+docker-compose -f docker-compose.protoc.yml build
+docker-compose -f docker-compose.protoc.yml up
+```
+
+Which should replace `dnsmessage/dnsmessage.pb.go` using `dnsmessage/dnsmessage.proto` as an input.
